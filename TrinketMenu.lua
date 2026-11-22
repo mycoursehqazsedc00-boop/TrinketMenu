@@ -561,8 +561,10 @@ function TrinketMenu.OnEvent()
 end
 
 function TrinketMenu.UpdateWornTrinkets()
-	TrinketMenu_Trinket0Icon:SetTexture(TrinketMenu.ItemInfo(13))
-	TrinketMenu_Trinket1Icon:SetTexture(TrinketMenu.ItemInfo(14))
+	local tex0 = TrinketMenu.ItemInfo(13)
+	local tex1 = TrinketMenu.ItemInfo(14)
+	TrinketMenu_Trinket0Icon:SetTexture(tex0)
+	TrinketMenu_Trinket1Icon:SetTexture(tex1)
 	TrinketMenu_Trinket0Icon:SetDesaturated(0)
 	TrinketMenu_Trinket0:SetChecked(0)
 	TrinketMenu_Trinket1Icon:SetDesaturated(0)
@@ -1224,7 +1226,8 @@ function TrinketMenu.UpdateCombatQueue()
 		if trinket then
 			_,bag,slot = TrinketMenu.FindItem(trinket)
 			if bag then
-				icon:SetTexture(GetContainerItemInfo(bag,slot))
+				local tex = GetContainerItemInfo(bag,slot)
+				icon:SetTexture(tex)
 				icon:Show()
 			end
 		elseif TrinketMenu.QueueInit and TrinketMenuQueue and TrinketMenuQueue.Enabled[which] then
