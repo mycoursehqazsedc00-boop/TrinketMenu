@@ -652,6 +652,24 @@ function TrinketMenu.SlashHandler(msg)
 		DEFAULT_CHAT_FRAME:AddMessage("/trinket load (top|bottom|merged) profilename\nie: /trinket load bottom PvP")
 	elseif msg=="compat" then
 		TrinketMenu.PrintCompat()
+	elseif string.find(msg,"^dock") then
+		local _,_,dir = string.find(msg,"^dock%s+(%S+)")
+		if dir=="top" then
+			TrinketMenuPerOptions.MainDock, TrinketMenuPerOptions.MenuDock = "TOPLEFT", "BOTTOMLEFT"
+		elseif dir=="bottom" then
+			TrinketMenuPerOptions.MainDock, TrinketMenuPerOptions.MenuDock = "BOTTOMLEFT", "TOPLEFT"
+		elseif dir=="left" then
+			TrinketMenuPerOptions.MainDock, TrinketMenuPerOptions.MenuDock = "TOPLEFT", "TOPRIGHT"
+		elseif dir=="right" then
+			TrinketMenuPerOptions.MainDock, TrinketMenuPerOptions.MenuDock = "TOPRIGHT", "TOPLEFT"
+		else
+			DEFAULT_CHAT_FRAME:AddMessage("|cFFFFFF00TrinketMenu dock:")
+			DEFAULT_CHAT_FRAME:AddMessage("/trinket dock top|bottom|left|right")
+			return
+		end
+		TrinketMenuOptions.KeepDocked = "ON"
+		TrinketMenu.DockWindows()
+		DEFAULT_CHAT_FRAME:AddMessage("|cFFBBBBBBTrinketMenu:|cFFFFFFFF Menu docked: "..dir)
 	elseif msg=="trace" then
 		TrinketMenu.trace = not TrinketMenu.trace
 		DEFAULT_CHAT_FRAME:AddMessage("|cFFBBBBBBTrinketMenu:|cFFFFFFFF Debug trace "..(TrinketMenu.trace and "|cFF00FF00ON" or "|cFFFF0000OFF"))
@@ -661,6 +679,7 @@ function TrinketMenu.SlashHandler(msg)
 		DEFAULT_CHAT_FRAME:AddMessage("/trinket reset : reset all settings")
 		DEFAULT_CHAT_FRAME:AddMessage("/trinket opt : summon options window")
 		DEFAULT_CHAT_FRAME:AddMessage("/trinket lock|unlock : toggles window lock")
+		DEFAULT_CHAT_FRAME:AddMessage("/trinket dock top|bottom|left|right : dock swap menu")
 		DEFAULT_CHAT_FRAME:AddMessage("/trinket scale main|menu (number) : sets an exact scale")
 		DEFAULT_CHAT_FRAME:AddMessage("/trinket load top|bottom|merged profilename : loads a profile")
 		DEFAULT_CHAT_FRAME:AddMessage("/trinket compat : show detected DLL/addon integrations")

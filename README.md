@@ -161,6 +161,7 @@ Save and load trinket priority configurations:
 | `/trinket scale menu <n>` | Set menu window scale |
 | `/trinket load top\|bottom\|merged <name>` | Load a profile via macro |
 | `/trinket compat` | **New.** Show which DLLs were detected and what TrinketMenu is using each one for; if ClassicAPI is loaded but its `C_Container` bag API isn't found, this also dumps the real function names present so a mismatch can be diagnosed |
+| `/trinket dock top\|bottom\|left\|right` | **New.** Dock the swap menu to the top, bottom, left, or right of the main frame without dragging |
 | `/trinket trace` | **New.** Toggle debug trace output for auto-queue, combat-queue, and `SPELL_CAST_EVENT` trinket uses |
 | `/trinket help` | List available commands |
 
