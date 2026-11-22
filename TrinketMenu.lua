@@ -1042,8 +1042,9 @@ function TrinketMenu.newUseAction(slot,cursor,self)
 		local trinket0 = TrinketMenu.EquippedTrinketName[13]
 		local trinket1 = TrinketMenu.EquippedTrinketName[14]
 		if trinket0 or trinket1 then
+			TrinketMenu_TooltipScan:SetOwner(UIParent, "ANCHOR_NONE")
 			TrinketMenu_TooltipScan:SetAction(slot)
-			local tipText = GameTooltipTextLeft1:GetText()
+			local tipText = TrinketMenu_TooltipScanTextLeft1 and TrinketMenu_TooltipScanTextLeft1:GetText()
 			if tipText and tipText==trinket0 then
 				TrinketMenu.ReflectTrinketUse(13)
 			elseif tipText and tipText==trinket1 then
