@@ -35,7 +35,7 @@ up automatically and fall back cleanly if it isn't present.
 | DLL | What TrinketMenu uses it for | Get it |
 |---|---|---|
 | **Nampower** | Primary integration - millisecond-accurate worn/bagged trinket cooldowns, instant trinket-use detection via `SPELL_CAST_EVENT` instead of tooltip-scanning | <https://github.com/brues-code/nampower> |
-| **ClassicAPI** | Backup bag-scan path (`C_Container`) used only when Nampower's `GetTrinkets()` isn't available | <https://github.com/brues-code/ClassicAPI> |
+| **ClassicAPI** | Backup bag-scan path (`C_Container`), and a backup itemID-based cooldown lookup (`GetItemCooldown`) - both used only when Nampower isn't available | <https://github.com/brues-code/ClassicAPI> |
 | **UnitXP SP3** | Optional taskbar/sound alert when a trinket becomes ready while the game window is in the background | <https://codeberg.org/konaka/UnitXP_SP3> |
 | SuperWoW | Detected and reported by `/trinket compat`, but currently unused - see [note below](#superwow--vanillahelpers) | <https://github.com/balakethelock/SuperWoW> |
 | VanillaHelpers | Detected and reported by `/trinket compat`, but has no relevant API for this addon - see [note below](#superwow--vanillahelpers) | <https://github.com/isfir/VanillaHelpers> |
@@ -161,6 +161,7 @@ Save and load trinket priority configurations:
 | `/trinket scale menu <n>` | Set menu window scale |
 | `/trinket load top\|bottom\|merged <name>` | Load a profile via macro |
 | `/trinket compat` | **New.** Show which DLLs were detected and what TrinketMenu is using each one for; if ClassicAPI is loaded but its `C_Container` bag API isn't found, this also dumps the real function names present so a mismatch can be diagnosed |
+| `/trinket trace` | **New.** Toggle debug trace output for auto-queue, combat-queue, and `SPELL_CAST_EVENT` trinket uses |
 | `/trinket help` | List available commands |
 
 ---
@@ -213,6 +214,7 @@ TrinketMenu.hasNampowerVersion -- GetNampowerVersion() available
 TrinketMenu.hasClassicAPI      -- ClassicAPI loaded (CLASSIC_API_VERSION global)
 TrinketMenu.hasClassicBag      -- ClassicAPI's C_Container bag functions confirmed working
 TrinketMenu.hasClassicTimer    -- ClassicAPI's C_Timer.After available
+TrinketMenu.hasClassicItemCooldown -- ClassicAPI's GetItemCooldown(itemID) available
 TrinketMenu.hasUnitXP          -- UnitXP SP3 loaded
 TrinketMenu.hasSuperWoW        -- SuperWoW loaded (unused by TrinketMenu, see above)
 TrinketMenu.hasVanillaHelpers  -- VanillaHelpers loaded (unused by TrinketMenu, see above)
@@ -231,7 +233,10 @@ When Nampower is available, TrinketMenu uses enhanced cooldown tracking:
 ### ClassicAPI Support
 When Nampower's fast bag-scan isn't available but ClassicAPI is, TrinketMenu
 uses ClassicAPI's `C_Container` API for a single-call-per-item bag scan
-instead of the slower raw `GetContainerItemLink` loop.
+instead of the slower raw `GetContainerItemLink` loop. Likewise, when
+Nampower's item-ID cooldown lookup isn't available, TrinketMenu falls back
+to ClassicAPI's `GetItemCooldown(itemID)` for the same "track a trinket's
+cooldown without needing to know its current bag/slot" benefit.
 
 ### UnitXP SP3 Support
 When available, trinket-ready notifications also trigger UnitXP's taskbar
@@ -307,6 +312,17 @@ A: No. Both are detected for informational purposes only - see
   detection failure indistinguishable from "not installed"
 - Added ClassicAPI's `C_Container` as a bag-scan fallback tier, used when
   Nampower's `GetTrinkets()` isn't available
+- Fixed a detection bug where `GetContainerNumSlots` was incorrectly checked
+  as a `C_Container` member (it's a plain global in ClassicAPI, same as
+  stock vanilla) - this made the bag-scan fallback silently never activate
+  even when ClassicAPI was fully loaded
+- Added ClassicAPI's `GetItemCooldown(itemID)` as a second fallback tier -
+  an itemID-based cooldown lookup that gives the same "works regardless of
+  which bag/slot the item is currently in" benefit Nampower provides,
+  usable without Nampower present at all
+- Checked WeirdUtils (codeberg.org/MarcelineVQ/WeirdUtils) per request; it
+  has no Lua-facing API (its only "API" is a C/C++ export for other DLLs),
+  so nothing was integrated
 - Added UnitXP SP3 taskbar/system-sound alert on trinket-ready notifications
   (only active while the game window is unfocused)
 - Added `/trinket compat` diagnostic command, including a live `C_Container`

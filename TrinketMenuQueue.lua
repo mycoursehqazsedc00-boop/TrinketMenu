@@ -150,13 +150,23 @@ function TrinketMenu.PopulateSort(which)
 	end
 
 	-- Add all bagged trinkets
-	local equipLoc,id
-	for i=0,4 do
-		for j=1,GetContainerNumSlots(i) do
-			id = TrinketMenu.GetID(i,j)
-			_,_,_,_,_,_,_,equipLoc = GetItemInfo(id or "")
-			if equipLoc=="INVTYPE_TRINKET" then
-				TrinketMenu.AddToSort(which,id)
+	if TrinketMenu.hasGetTrinkets then
+		local trinkets = GetTrinkets()
+		for i=1,table.getn(trinkets) do
+			local t = trinkets[i]
+			if t.bagIndex ~= nil and t.itemId then
+				TrinketMenu.AddToSort(which, tostring(t.itemId))
+			end
+		end
+	else
+		local equipLoc,id
+		for i=0,4 do
+			for j=1,GetContainerNumSlots(i) do
+				id = TrinketMenu.GetID(i,j)
+				_,_,_,_,_,_,_,equipLoc = GetItemInfo(id or "")
+				if equipLoc=="INVTYPE_TRINKET" then
+					TrinketMenu.AddToSort(which,id)
+				end
 			end
 		end
 	end
@@ -169,7 +179,7 @@ function TrinketMenu.SortScrollFrameUpdate()
 	FauxScrollFrame_Update(TrinketMenu_SortScroll, list and table.getn(list) or 0, 9, 24)
 
 	if list then
-		local r,g,b,found
+		local r,g,b,idx
 		local texture,name,quality
 		local item,itemName,itemIcon
 		for i=1,9 do
@@ -326,21 +336,27 @@ end
 
 function TrinketMenu.SortDelay_OnTextChanged()
 	local delay = tonumber(TrinketMenu_SortDelay:GetText()) or 0
-	local id = TrinketMenuQueue.Sort[TrinketMenu.CurrentlySorting][TrinketMenu.SortSelected]
+	local list = TrinketMenuQueue.Sort[TrinketMenu.CurrentlySorting]
+	local id = list and list[TrinketMenu.SortSelected]
+	if not id or id == 0 then return end
 	TrinketMenuQueue.Stats[id] = TrinketMenuQueue.Stats[id] or {}
 	TrinketMenuQueue.Stats[id].delay = delay~=0 and delay or nil
 end
 
 function TrinketMenu.SortPriority_OnClick()
 	local check = this:GetChecked()
-	local id = TrinketMenuQueue.Sort[TrinketMenu.CurrentlySorting][TrinketMenu.SortSelected]
+	local list = TrinketMenuQueue.Sort[TrinketMenu.CurrentlySorting]
+	local id = list and list[TrinketMenu.SortSelected]
+	if not id or id == 0 then return end
 	TrinketMenuQueue.Stats[id] = TrinketMenuQueue.Stats[id] or {}
 	TrinketMenuQueue.Stats[id].priority = check
 end
 
 function TrinketMenu.SortKeepEquipped_OnClick()
 	local check = this:GetChecked()
-	local id = TrinketMenuQueue.Sort[TrinketMenu.CurrentlySorting][TrinketMenu.SortSelected]
+	local list = TrinketMenuQueue.Sort[TrinketMenu.CurrentlySorting]
+	local id = list and list[TrinketMenu.SortSelected]
+	if not id or id == 0 then return end
 	TrinketMenuQueue.Stats[id] = TrinketMenuQueue.Stats[id] or {}
 	TrinketMenuQueue.Stats[id].keep = check
 end
@@ -371,15 +387,16 @@ function TrinketMenu.TrinketNearReady(bag,slot,itemId)
 	if TrinketMenu.hasNampower and not slot and (bag==13 or bag==14) then
 		local trinketSlot = bag - 12 -- Convert 13/14 to 1/2
 		local cd = GetTrinketCooldown(trinketSlot)
-		if cd ~= -1 then
+		if type(cd) == "table" then
 			return (cd.isOnCooldown == 0 or cd.cooldownRemainingMs <= 30000) and 1 or nil
 		end
 	end
 
 	-- Use Nampower's GetItemIdCooldown for bagged trinkets if available
-	if TrinketMenu.hasGetItemIdCooldown and itemId and itemId ~= 0 then
-		local cd = GetItemIdCooldown(itemId)
-		if cd then
+	local numId = tonumber(itemId)
+	if TrinketMenu.hasGetItemIdCooldown and numId and numId ~= 0 then
+		local cd = GetItemIdCooldown(numId)
+		if type(cd) == "table" then
 			return (cd.isOnCooldown == 0 or cd.cooldownRemainingMs <= 30000) and 1 or nil
 		end
 	end
@@ -407,7 +424,7 @@ function TrinketMenu.GetCooldownRemaining(invSlot)
 	if TrinketMenu.hasNampower then
 		local trinketSlot = invSlot - 12 -- Convert 13/14 to 1/2
 		local cd = GetTrinketCooldown(trinketSlot)
-		if cd ~= -1 then
+		if type(cd) == "table" then
 			return cd.cooldownRemainingMs / 1000
 		end
 	end
@@ -456,7 +473,7 @@ function TrinketMenu.ProcessAutoQueue(which)
 	local start,duration,enable
 	if TrinketMenu.hasNampower then
 		local cd = GetTrinketCooldown(which+1)
-		if cd ~= -1 then
+		if type(cd) == "table" then
 			enable = cd.itemHasActiveSpell
 			if cd.isOnIndividualCooldown == 1 then
 				start = cd.individualStartS
@@ -535,12 +552,16 @@ function TrinketMenu.ProcessAutoQueue(which)
 				-- Skip this trinket, it's in the current slot
 			elseif not ready or enable==0 or (TrinketMenuQueue.Stats[list[i]] and TrinketMenuQueue.Stats[list[i]].priority) then
 				name = GetItemInfo(list[i]) or ""
+				if name ~= "" and not TrinketMenu.WatchItem[name] then
+					TrinketMenu.AddWatchItem(name,nil,nil,nil,list[i])
+				end
 				if TrinketMenu.WatchItem[name] then
 					bag,slot = TrinketMenu.WatchItem[name].bag,TrinketMenu.WatchItem[name].slot
 					if bag then
 						if string.find(GetContainerItemLink(bag,slot) or "",name,1,1) then
 							if TrinketMenu.TrinketNearReady(bag,slot,list[i]) then
 								if TrinketMenu.CombatQueue[which]~=name then
+									TrinketMenu.Trace("AutoQueue slot "..(13+which).." -> "..name)
 									TrinketMenu.EquipTrinketByName(name,13+which)
 								end
 								break
@@ -567,7 +588,8 @@ end
 -- (a "stop the queue" is assumed at the end of the list)
 function TrinketMenu.SetQueue(which,...)
 	local errorstub = "|cFFBBBBBBTrinketMenu:|cFFFFFFFF "
-	if not which or not tonumber(which) or which<0 or which>1 then
+	which = tonumber(which)
+	if not which or which<0 or which>1 then
 		DEFAULT_CHAT_FRAME:AddMessage(errorstub.."First parameter must be 0 for top trinket or 1 for bottom.")
 		return
 	end
@@ -589,15 +611,24 @@ function TrinketMenu.SetQueue(which,...)
 	elseif arg[1]=="RESUME" then
 		TrinketMenu.PausedQueue[which]=nil
 	elseif arg[1]=="SORT" and table.getn(arg)>1 then
-		local sortidx,inv,bag,slot,id = 1
 		-- Clear the sort list
 		for i = table.getn(TrinketMenuQueue.Sort[which]), 1, -1 do
 			table.remove(TrinketMenuQueue.Sort[which], i)
 		end
-		local profile = TrinketMenu.GetProfileID(arg[2])
-		if profile then
-			for i=2,table.getn(TrinketMenuQueue.Profiles[profile]) do
-				table.insert(TrinketMenuQueue.Sort[which],TrinketMenuQueue.Profiles[profile][i])
+		local profileIdx = TrinketMenu.GetProfileID(arg[2])
+		if profileIdx then
+			local prof = TrinketMenuQueue.Profiles[profileIdx]
+			if prof.top then
+				local src = (which == 0) and prof.top or prof.bottom
+				if src then
+					for i=1,table.getn(src) do
+						table.insert(TrinketMenuQueue.Sort[which],src[i])
+					end
+				end
+			else
+				for i=2,table.getn(prof) do
+					table.insert(TrinketMenuQueue.Sort[which],prof[i])
+				end
 			end
 		else
 			for i=2,table.getn(arg) do
@@ -689,7 +720,7 @@ function TrinketMenu.ProfileScrollFrameUpdate()
 	local list = TrinketMenuQueue.Profiles
 	FauxScrollFrame_Update(TrinketMenu_ProfileScroll, table.getn(list) or 0, 7, 20)
 
-	local item
+	local item, idx
 	for i=1,7 do
 		idx = offset+i
 		item = _G["TrinketMenu_Profile"..i]

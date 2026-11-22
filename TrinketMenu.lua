@@ -3,27 +3,49 @@
 TrinketMenu = {}
 
 -- Feature detection for Nampower/SuperWoW/UnitXP/ClassicAPI/VanillaHelpers
-TrinketMenu.hasNampower = GetTrinketCooldown ~= nil
-TrinketMenu.hasGetTrinkets = GetTrinkets ~= nil
-TrinketMenu.hasGetItemIdCooldown = GetItemIdCooldown ~= nil
-TrinketMenu.hasNampowerVersion = GetNampowerVersion ~= nil
-TrinketMenu.hasSuperWoW = SUPERWOW_VERSION ~= nil
-TrinketMenu.hasUnitXP = pcall(function() UnitXP("nop", "nop") end)
--- ClassicAPI's own docs specify CLASSIC_API_VERSION as the canonical way to
--- detect the DLL - probing individual C_* tables can miss it if a given
--- build doesn't expose every sub-table, so we check both and report them
--- separately (see /trinket compat).
-TrinketMenu.hasClassicAPI = (CLASSIC_API_VERSION ~= nil)
-TrinketMenu.hasClassicBag = (type(C_Container) == "table"
-	and type(C_Container.GetContainerNumSlots) == "function"
-	and type(C_Container.GetContainerItemInfo) == "function")
-TrinketMenu.hasClassicTimer = (type(C_Timer) == "table" and type(C_Timer.After) == "function")
--- VanillaHelpers is a display/model/file-IO DLL (minimap blips, character-skin
--- morphing, WriteFile/ReadFile). It exposes no item, bag, cooldown or spell
--- API, so there is nothing here for a trinket-swap addon to hook. Detected
--- only so /trinket compat can report it accurately instead of pretending an
--- integration exists.
-TrinketMenu.hasVanillaHelpers = (WriteFile ~= nil and ReadFile ~= nil)
+-- Runs at file load and refreshes on PLAYER_LOGIN to catch late-initializing DLLs.
+function TrinketMenu.DetectMods()
+	TrinketMenu.hasNampower = GetTrinketCooldown ~= nil
+	TrinketMenu.hasGetTrinkets = GetTrinkets ~= nil
+	TrinketMenu.hasGetItemIdCooldown = GetItemIdCooldown ~= nil
+	TrinketMenu.hasNampowerVersion = GetNampowerVersion ~= nil
+	TrinketMenu.hasSuperWoW = SUPERWOW_VERSION ~= nil
+	TrinketMenu.hasUnitXP = pcall(UnitXP, "nop", "nop")
+	-- ClassicAPI's own docs specify CLASSIC_API_VERSION as the canonical way to
+	-- detect the DLL - probing individual C_* tables can miss it if a given
+	-- build doesn't expose every sub-table, so we check both and report them
+	-- separately (see /trinket compat).
+	TrinketMenu.hasClassicAPI = (CLASSIC_API_VERSION ~= nil)
+	-- NOTE: GetContainerNumSlots stays a plain global in ClassicAPI (it is not
+	-- moved onto C_Container), so we only need to confirm GetContainerItemInfo
+	-- exists on C_Container itself - requiring C_Container.GetContainerNumSlots
+	-- here was the bug that made this read "not detected" even when ClassicAPI
+	-- was loaded.
+	TrinketMenu.hasClassicBag = (type(C_Container) == "table"
+		and type(C_Container.GetContainerItemInfo) == "function")
+	TrinketMenu.hasClassicTimer = (type(C_Timer) == "table" and type(C_Timer.After) == "function")
+	-- ClassicAPI's GetItemCooldown(itemID)/C_Container.GetItemCooldown(itemID) is
+	-- a direct-by-ID cooldown lookup (start,duration,enable) - the same shape
+	-- GetContainerItemCooldown/GetInventoryItemCooldown already return, just
+	-- addressed by item ID instead of bag/slot. This is what lets us track a
+	-- trinket's cooldown without Nampower even if the trinket moves bags/slots.
+	TrinketMenu.hasClassicItemCooldown = (type(C_Container) == "table" and type(C_Container.GetItemCooldown) == "function")
+		or type(GetItemCooldown) == "function"
+	-- VanillaHelpers is a display/model/file-IO DLL (minimap blips, character-skin
+	-- morphing, WriteFile/ReadFile). It exposes no item, bag, cooldown or spell
+	-- API, so there is nothing here for a trinket-swap addon to hook. Detected
+	-- only so /trinket compat can report it accurately instead of pretending an
+	-- integration exists.
+	TrinketMenu.hasVanillaHelpers = (WriteFile ~= nil and ReadFile ~= nil)
+end
+TrinketMenu.DetectMods()
+
+TrinketMenu.trace = false
+function TrinketMenu.Trace(msg)
+	if TrinketMenu.trace then
+		DEFAULT_CHAT_FRAME:AddMessage("|cFF44AAFF[TrinketMenu Trace]|r "..tostring(msg))
+	end
+end
 
 function TrinketMenu.LoadDefaults()
 
@@ -163,6 +185,7 @@ function TrinketMenu.ScanBaggedTrinkets()
 		-- numeric fileDataIDs that vanilla SetTexture doesn't accept
 		local trinkets = GetTrinkets()
 		for i=1,table.getn(trinkets) do
+			if idx > TrinketMenu.MaxTrinkets then break end
 			local t = trinkets[i]
 			if t.bagIndex ~= nil then -- bagged only (nil = equipped)
 				if not TrinketMenu.BaggedTrinkets[idx] then
@@ -178,26 +201,36 @@ function TrinketMenu.ScanBaggedTrinkets()
 		end
 	elseif TrinketMenu.hasClassicBag then
 		-- ClassicAPI fast(er) path: some servers ship ClassicAPI's C_Container
-		-- backport without Nampower. This mirrors the retail container API 1:1,
-		-- so we still confirm INVTYPE_TRINKET via GetItemInfo per item, but skip
-		-- the raw GetContainerItemLink pattern-matching below.
-		local info,itemID,equipSlot,itemTexture
+		-- backport without Nampower. GetContainerItemInfo's table already
+		-- gives us itemID/itemName/hyperlink/iconFileID directly (confirmed
+		-- against ClassicAPI's own reference), so no regex parsing needed -
+		-- we still confirm INVTYPE_TRINKET via GetItemInfo per item since
+		-- ContainerItemInfo doesn't carry an equip-slot field.
+		local info,equipSlot,itemTexture,itemName
 		for i=0,4 do
-			for j=1,C_Container.GetContainerNumSlots(i) do
+			if idx > TrinketMenu.MaxTrinkets then break end
+			for j=1,GetContainerNumSlots(i) do
+				if idx > TrinketMenu.MaxTrinkets then break end
 				info = C_Container.GetContainerItemInfo(i,j)
-				if info and info.hyperlink then
-					_,_,itemID = string.find(info.hyperlink,"item:(%d+)")
-					_,_,_,_,_,_,_,equipSlot,itemTexture = GetItemInfo(itemID or "")
+				if info and info.itemID then
+					_,_,_,_,_,_,_,equipSlot,itemTexture = GetItemInfo(info.itemID)
 					if equipSlot=="INVTYPE_TRINKET" then
 						if not TrinketMenu.BaggedTrinkets[idx] then
 							TrinketMenu.BaggedTrinkets[idx] = {}
 						end
-						local _,_,itemName = string.find(info.hyperlink,"%[(.+)%]")
+						-- itemName is cache-derived and can briefly be nil right
+						-- after a bag update; hyperlink is a live per-instance
+						-- field per ClassicAPI's docs, so pull the name from the
+						-- link text the same way the other two scan tiers do.
+						itemName = info.itemName
+						if not itemName and info.hyperlink then
+							_,_,itemName = string.find(info.hyperlink,"%[(.+)%]")
+						end
 						TrinketMenu.BaggedTrinkets[idx].bag = i
 						TrinketMenu.BaggedTrinkets[idx].slot = j
 						TrinketMenu.BaggedTrinkets[idx].name = itemName
 						TrinketMenu.BaggedTrinkets[idx].texture = info.iconFileID or itemTexture
-						TrinketMenu.BaggedTrinkets[idx].id = itemID
+						TrinketMenu.BaggedTrinkets[idx].id = info.itemID
 						idx = idx + 1
 					end
 				end
@@ -207,7 +240,9 @@ function TrinketMenu.ScanBaggedTrinkets()
 		-- Vanilla fallback: scan all bag slots
 		local itemLink,itemID,itemName,equipSlot,itemTexture
 		for i=0,4 do
+			if idx > TrinketMenu.MaxTrinkets then break end
 			for j=1,GetContainerNumSlots(i) do
+				if idx > TrinketMenu.MaxTrinkets then break end
 				itemLink = GetContainerItemLink(i,j)
 				if itemLink then
 					_,_,itemID,itemName = string.find(itemLink,"item:(%d+).+%[(.+)%]")
@@ -473,10 +508,14 @@ function TrinketMenu.OnEvent()
 
 	if event=="BAG_UPDATE" then
 		TrinketMenu.BagsDirty = true
-		if arg1>=0 and arg1<=4 then
-			TrinketMenu.BagsNeedUpdating[arg1] = 1
+		if arg1 and arg1>=0 and arg1<=4 then
+			if TrinketMenu.BagsNeedUpdating then
+				TrinketMenu.BagsNeedUpdating[arg1] = 1
+			end
 		end
-		TrinketMenu.StartTimer("UpdateBaggedTrinkets")
+		if TrinketMenu.TimerPool and TrinketMenu.TimerPool["UpdateBaggedTrinkets"] then
+			TrinketMenu.StartTimer("UpdateBaggedTrinkets")
+		end
 	elseif event=="UNIT_INVENTORY_CHANGED" and arg1=="player" then
 		TrinketMenu.UpdateWornTrinkets()
 	elseif event=="ACTIONBAR_UPDATE_COOLDOWN" then
@@ -484,6 +523,7 @@ function TrinketMenu.OnEvent()
 	elseif (event=="PLAYER_REGEN_ENABLED" or event=="PLAYER_UNGHOST" or event=="PLAYER_ALIVE") and not TrinketMenu.IsPlayerReallyDead() then
 		-- trinkets can now be swapped after combat/death
 		if TrinketMenu.CombatQueue[0] or TrinketMenu.CombatQueue[1] then
+			TrinketMenu.Trace("Combat/death ended, processing combat queue")
 			TrinketMenu.EquipTrinketByName(TrinketMenu.CombatQueue[0],13)
 			TrinketMenu.EquipTrinketByName(TrinketMenu.CombatQueue[1],14)
 			TrinketMenu.CombatQueue[0] = nil
@@ -497,12 +537,15 @@ function TrinketMenu.OnEvent()
 		if arg1==1 and arg5 and arg5~=0 then
 			local itemIdStr = tostring(arg5)
 			if itemIdStr == TrinketMenu.EquippedTrinketID[13] then
+				TrinketMenu.Trace("SPELL_CAST_EVENT matched slot 13 itemId="..itemIdStr)
 				TrinketMenu.ReflectTrinketUse(13)
 			elseif itemIdStr == TrinketMenu.EquippedTrinketID[14] then
+				TrinketMenu.Trace("SPELL_CAST_EVENT matched slot 14 itemId="..itemIdStr)
 				TrinketMenu.ReflectTrinketUse(14)
 			end
 		end
 	elseif event=="PLAYER_LOGIN" then
+		TrinketMenu.DetectMods()
 		TrinketMenu.LoadDefaults()
 		TrinketMenu.Initialize()
 	this:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -607,6 +650,9 @@ function TrinketMenu.SlashHandler(msg)
 		DEFAULT_CHAT_FRAME:AddMessage("/trinket load (top|bottom|merged) profilename\nie: /trinket load bottom PvP")
 	elseif msg=="compat" then
 		TrinketMenu.PrintCompat()
+	elseif msg=="trace" then
+		TrinketMenu.trace = not TrinketMenu.trace
+		DEFAULT_CHAT_FRAME:AddMessage("|cFFBBBBBBTrinketMenu:|cFFFFFFFF Debug trace "..(TrinketMenu.trace and "|cFF00FF00ON" or "|cFFFF0000OFF"))
 	else
 		DEFAULT_CHAT_FRAME:AddMessage("|cFFFFFF00TrinketMenu useage:")
 		DEFAULT_CHAT_FRAME:AddMessage("/trinket or /trinketmenu : toggle the window")
@@ -616,6 +662,7 @@ function TrinketMenu.SlashHandler(msg)
 		DEFAULT_CHAT_FRAME:AddMessage("/trinket scale main|menu (number) : sets an exact scale")
 		DEFAULT_CHAT_FRAME:AddMessage("/trinket load top|bottom|merged profilename : loads a profile")
 		DEFAULT_CHAT_FRAME:AddMessage("/trinket compat : show detected DLL/addon integrations")
+		DEFAULT_CHAT_FRAME:AddMessage("/trinket trace : toggle debug trace output")
 	end
 end
 
@@ -638,6 +685,8 @@ function TrinketMenu.PrintCompat()
 		(TrinketMenu.hasClassicBag and "|cFFFFFFFF - used as bag-scan fallback when Nampower's GetTrinkets is absent" or
 			(TrinketMenu.hasClassicAPI and "|cFFFFFFFF - ClassicAPI is loaded but C_Container wasn't found on this build/version" or "")))
 	DEFAULT_CHAT_FRAME:AddMessage("  C_Timer: "..(TrinketMenu.hasClassicTimer and on or off))
+	DEFAULT_CHAT_FRAME:AddMessage("  Item-ID cooldown lookup: "..(TrinketMenu.hasClassicItemCooldown and on or off)..
+		(TrinketMenu.hasClassicItemCooldown and "|cFFFFFFFF - tracks used trinkets by item ID without Nampower, same as Nampower's advantage" or ""))
 	if TrinketMenu.hasClassicAPI and not TrinketMenu.hasClassicBag then
 		if type(C_Container) ~= "table" then
 			DEFAULT_CHAT_FRAME:AddMessage("  |cFFFFAA00C_Container global doesn't exist at all on this build.")
@@ -1219,13 +1268,27 @@ function TrinketMenu.AddWatchItem(name,inv,bag,slot,id)
 		inv = TrinketMenu.WatchItem[name].inv
 		bag = TrinketMenu.WatchItem[name].bag
 		slot = TrinketMenu.WatchItem[name].slot
-		if not string.find((inv and (GetInventoryItemLink("player",inv) or "")) or (bag and (GetContainerItemLink(bag,slot) or "")) or "",name) then
+		if not string.find((inv and (GetInventoryItemLink("player",inv) or "")) or (bag and (GetContainerItemLink(bag,slot) or "")) or "",name,1,1) then
 			inv,bag,slot = TrinketMenu.FindItem(name,1)
 		end
 	end
 	TrinketMenu.WatchItem[name].inv = inv
 	TrinketMenu.WatchItem[name].bag = bag
 	TrinketMenu.WatchItem[name].slot = slot
+end
+
+-- ClassicAPI itemID-based cooldown lookup. Returns (start,duration) in the
+-- same shape GetContainerItemCooldown/GetInventoryItemCooldown use, or nil
+-- if ClassicAPI's cooldown call isn't available.
+function TrinketMenu.ClassicItemCooldown(itemID)
+	if not TrinketMenu.hasClassicItemCooldown or not itemID then return nil end
+	local start,duration
+	if type(C_Container) == "table" and type(C_Container.GetItemCooldown) == "function" then
+		start,duration = C_Container.GetItemCooldown(tonumber(itemID))
+	else
+		start,duration = GetItemCooldown(tonumber(itemID))
+	end
+	return start,duration
 end
 
 function TrinketMenu.CooldownUpdate()
@@ -1239,13 +1302,24 @@ function TrinketMenu.CooldownUpdate()
 		if hasIdCD and watch[i] and watch[i].id then
 			-- Nampower fast path: use item ID directly, skip bag/slot tracking
 			local cd = GetItemIdCooldown(tonumber(watch[i].id))
-			if cd then
+			if type(cd) == "table" then
 				if cd.isOnCooldown == 1 then
 					start = 1
 					remain = cd.cooldownRemainingMs / 1000
 				else
 					start = 0
 				end
+			else
+				TrinketMenuPerOptions.ItemsUsed[i] = nil
+			end
+		elseif TrinketMenu.hasClassicItemCooldown and watch[i] and watch[i].id then
+			-- ClassicAPI fast path: itemID-based cooldown, same advantage as
+			-- Nampower (no bag/slot re-tracking needed) via GetItemCooldown
+			local cdStart,cdDuration = TrinketMenu.ClassicItemCooldown(watch[i].id)
+			if cdStart and cdStart>0 then
+				start,duration = cdStart,cdDuration
+			elseif cdStart==0 then
+				start = 0
 			else
 				TrinketMenuPerOptions.ItemsUsed[i] = nil
 			end
@@ -1321,7 +1395,7 @@ function TrinketMenu.WriteWornCooldowns()
 		local now = GetTime()
 		for i=0,1 do
 			local cd = GetTrinketCooldown(i+1)
-			if cd ~= -1 and cd.isOnCooldown == 1 then
+			if type(cd) == "table" and cd.isOnCooldown == 1 then
 				TrinketMenu.WriteCooldown(_G["TrinketMenu_Trinket"..i.."Time"], now, cd.cooldownRemainingMs / 1000)
 			else
 				TrinketMenu.WriteCooldown(_G["TrinketMenu_Trinket"..i.."Time"], 0, 0)
@@ -1344,7 +1418,7 @@ function TrinketMenu.WriteMenuCooldowns()
 			local id = TrinketMenu.BaggedTrinkets[i].id
 			if id then
 				local cd = GetItemIdCooldown(tonumber(id))
-				if cd and cd.isOnCooldown == 1 then
+				if type(cd) == "table" and cd.isOnCooldown == 1 then
 					TrinketMenu.WriteCooldown(TrinketMenu.MenuTimeFrames[i], now, cd.cooldownRemainingMs / 1000)
 				else
 					TrinketMenu.WriteCooldown(TrinketMenu.MenuTimeFrames[i], 0, 0)
@@ -1353,6 +1427,19 @@ function TrinketMenu.WriteMenuCooldowns()
 				start, duration = GetContainerItemCooldown(TrinketMenu.BaggedTrinkets[i].bag, TrinketMenu.BaggedTrinkets[i].slot)
 				TrinketMenu.WriteCooldown(TrinketMenu.MenuTimeFrames[i], start, duration)
 			end
+		end
+	elseif TrinketMenu.hasClassicItemCooldown then
+		-- ClassicAPI fast path: same itemID-based lookup, no Nampower needed
+		for i=1,TrinketMenu.NumberOfTrinkets do
+			start,duration = nil,nil
+			local id = TrinketMenu.BaggedTrinkets[i].id
+			if id then
+				start,duration = TrinketMenu.ClassicItemCooldown(id)
+			end
+			if not start then
+				start, duration = GetContainerItemCooldown(TrinketMenu.BaggedTrinkets[i].bag, TrinketMenu.BaggedTrinkets[i].slot)
+			end
+			TrinketMenu.WriteCooldown(TrinketMenu.MenuTimeFrames[i], start, duration)
 		end
 	else
 		for i=1,TrinketMenu.NumberOfTrinkets do
