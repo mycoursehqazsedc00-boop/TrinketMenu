@@ -515,7 +515,7 @@ function TrinketMenu.ProcessAutoQueue(which)
 		end
 	end
 
-	icon:SetDesaturated(0) -- normal queue operation, reflect that in queue inset
+	icon:SetDesaturated(nil) -- normal queue operation, reflect that in queue inset
 	icon:SetVertexColor(1,1,1)
 
 --	local name = TrinketMenu.GetNameByID(id)
