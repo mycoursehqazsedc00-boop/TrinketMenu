@@ -654,21 +654,12 @@ function TrinketMenu.SlashHandler(msg)
 		TrinketMenu.PrintCompat()
 	elseif string.find(msg,"^dock") then
 		local _,_,dir = string.find(msg,"^dock%s+(%S+)")
-		if dir=="top" then
-			TrinketMenuPerOptions.MainDock, TrinketMenuPerOptions.MenuDock = "TOPLEFT", "BOTTOMLEFT"
-		elseif dir=="bottom" then
-			TrinketMenuPerOptions.MainDock, TrinketMenuPerOptions.MenuDock = "BOTTOMLEFT", "TOPLEFT"
-		elseif dir=="left" then
-			TrinketMenuPerOptions.MainDock, TrinketMenuPerOptions.MenuDock = "TOPLEFT", "TOPRIGHT"
-		elseif dir=="right" then
-			TrinketMenuPerOptions.MainDock, TrinketMenuPerOptions.MenuDock = "TOPRIGHT", "TOPLEFT"
-		else
+		local ok = dir and TrinketMenu.SetDockDirection and TrinketMenu.SetDockDirection(string.upper(dir))
+		if not ok then
 			DEFAULT_CHAT_FRAME:AddMessage("|cFFFFFF00TrinketMenu dock:")
 			DEFAULT_CHAT_FRAME:AddMessage("/trinket dock top|bottom|left|right")
 			return
 		end
-		TrinketMenuOptions.KeepDocked = "ON"
-		TrinketMenu.DockWindows()
 		DEFAULT_CHAT_FRAME:AddMessage("|cFFBBBBBBTrinketMenu:|cFFFFFFFF Menu docked: "..dir)
 	elseif msg=="trace" then
 		TrinketMenu.trace = not TrinketMenu.trace

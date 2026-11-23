@@ -224,7 +224,7 @@
 
 	<!-- MenuFrame: Bagged Trinkets -->
 
-	<Frame name="TrinketMenu_MenuFrame" toplevel="true" frameStrata="MEDIUM" enableMouse="true" movable="true" parent="UIParent" hidden="true" clampedToScreen="true">
+	<Frame name="TrinketMenu_MenuFrame" toplevel="true" frameStrata="FULLSCREEN_DIALOG" enableMouse="true" movable="true" parent="UIParent" hidden="true" clampedToScreen="true">
 		<Size>
 			<AbsDimension x="52" y="91" />
 		</Size>

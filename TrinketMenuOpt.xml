@@ -293,6 +293,20 @@
 							</Anchor>
 						</Anchors>
 					</CheckButton>
+					<Button name="TrinketMenu_OptDockMenu" inherits="UIDropDownMenuTemplate">
+						<Anchors>
+							<Anchor point="TOPLEFT" relativeTo="TrinketMenu_OptShowHotKeys" relativePoint="BOTTOMLEFT">
+								<Offset>
+									<AbsDimension x="-16" y="-6"/>
+								</Offset>
+							</Anchor>
+						</Anchors>
+						<Scripts>
+							<OnShow>
+								UIDropDownMenu_Initialize(this, TrinketMenu.DockMenu_Initialize)
+							</OnShow>
+						</Scripts>
+					</Button>
 					<CheckButton name="TrinketMenu_OptKeepDocked" inherits="TrinketMenu_CheckButtonTemplate">
 						<Anchors>
 							<Anchor point="TOPLEFT" relativePoint="TOP">

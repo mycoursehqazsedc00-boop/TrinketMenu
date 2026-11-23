@@ -60,14 +60,17 @@ function TrinketMenu.InitOptions()
 	if TrinketMenu.QueueInit then
 		TrinketMenu.QueueInit()
 		TrinketMenu_Tab1:Show()
-		TrinketMenu_OptFrame:SetHeight(326)
+		TrinketMenu_OptFrame:SetHeight(360)
 		TrinketMenu_SubOptFrame:SetPoint("TOPLEFT",TrinketMenu_OptFrame,"TOPLEFT",8,-50)
 		TrinketMenu.ReflectMergedMode()
 	else
 		TrinketMenu_OptStopOnSwap:Hide() -- remove StopOnSwap option if queue not loaded
 		TrinketMenu_Tab1:Hide() -- hide options tab if it's only tab
-		TrinketMenu_OptFrame:SetHeight(300)
+		TrinketMenu_OptFrame:SetHeight(334)
 		TrinketMenu_SubOptFrame:SetPoint("TOPLEFT",TrinketMenu_OptFrame,"TOPLEFT",8,-24)
+	end
+	if TrinketMenu_OptDockMenu then
+		UIDropDownMenu_SetWidth(105, TrinketMenu_OptDockMenu)
 	end
 	TrinketMenu_OptColumnsSlider:SetValue(TrinketMenuOptions.Columns)
 	TrinketMenu.ReflectLock()
@@ -86,6 +89,10 @@ end
 function TrinketMenu.OptFrame_OnShow()
 	TrinketMenu.ValidateChecks()
 	TrinketMenu.ReflectMergedMode()
+	if TrinketMenu_OptDockMenu then
+		UIDropDownMenu_Initialize(TrinketMenu_OptDockMenu, TrinketMenu.DockMenu_Initialize)
+		UIDropDownMenu_SetSelectedValue(TrinketMenu_OptDockMenu, TrinketMenu.GetDockDirection())
+	end
 	if TrinketMenuQueue and TrinketMenuQueue.MergedMode then
 		-- In merged mode, show the queue frame with merged list
 		TrinketMenu_SubOptFrame:Hide()
@@ -372,4 +379,62 @@ function TrinketMenu.Tab_OnClick(override)
 		-- Tab 2 = Bottom (slot 1), Tab 3 = Top (slot 0)
 		TrinketMenu.OpenSort(3-id)
 	end
+end
+
+--[[ Swap Menu Dock Position Dropdown ]]--
+
+function TrinketMenu.GetDockDirection()
+	local anchor = (TrinketMenuPerOptions.MainDock or "")..(TrinketMenuPerOptions.MenuDock or "")
+	if anchor=="TOPLEFTBOTTOMLEFT" or anchor=="TOPRIGHTBOTTOMRIGHT" then
+		return "TOP"
+	elseif anchor=="BOTTOMLEFTTOPLEFT" or anchor=="BOTTOMRIGHTTOPRIGHT" then
+		return "BOTTOM"
+	elseif anchor=="TOPLEFTTOPRIGHT" or anchor=="BOTTOMLEFTBOTTOMRIGHT" then
+		return "LEFT"
+	elseif anchor=="TOPRIGHTTOPLEFT" or anchor=="BOTTOMRIGHTBOTTOMLEFT" then
+		return "RIGHT"
+	end
+	return "RIGHT"
+end
+
+function TrinketMenu.SetDockDirection(dir)
+	if dir=="TOP" then
+		TrinketMenuPerOptions.MainDock, TrinketMenuPerOptions.MenuDock = "TOPLEFT", "BOTTOMLEFT"
+	elseif dir=="BOTTOM" then
+		TrinketMenuPerOptions.MainDock, TrinketMenuPerOptions.MenuDock = "BOTTOMLEFT", "TOPLEFT"
+	elseif dir=="LEFT" then
+		TrinketMenuPerOptions.MainDock, TrinketMenuPerOptions.MenuDock = "BOTTOMLEFT", "BOTTOMRIGHT"
+	elseif dir=="RIGHT" then
+		TrinketMenuPerOptions.MainDock, TrinketMenuPerOptions.MenuDock = "BOTTOMRIGHT", "BOTTOMLEFT"
+	else
+		return false
+	end
+	TrinketMenuOptions.KeepDocked = "ON"
+	TrinketMenu.ValidateChecks()
+	TrinketMenu.DockWindows()
+	if TrinketMenu_OptDockMenu then
+		UIDropDownMenu_SetSelectedValue(TrinketMenu_OptDockMenu, dir)
+	end
+	return true
+end
+
+function TrinketMenu.DockMenu_OnClick()
+	TrinketMenu.SetDockDirection(this.value)
+end
+
+function TrinketMenu.DockMenu_Initialize()
+	local items = {
+		{ text = "Menu: On Top", value = "TOP" },
+		{ text = "Menu: At Bottom", value = "BOTTOM" },
+		{ text = "Menu: On Left", value = "LEFT" },
+		{ text = "Menu: On Right", value = "RIGHT" },
+	}
+	for i=1,table.getn(items) do
+		local info = {}
+		info.text = items[i].text
+		info.value = items[i].value
+		info.func = TrinketMenu.DockMenu_OnClick
+		UIDropDownMenu_AddButton(info)
+	end
+	UIDropDownMenu_SetSelectedValue(TrinketMenu_OptDockMenu, TrinketMenu.GetDockDirection())
 end
