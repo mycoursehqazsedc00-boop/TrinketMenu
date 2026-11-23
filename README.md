@@ -18,8 +18,8 @@ to have nothing extra to offer this specific addon. See
 - **Profile System** - Save and load trinket priority configurations
 - **Cooldown Tracking** - Visual cooldown displays with optional numeric countdown, millisecond-accurate when Nampower is loaded
 - **Combat Queuing** - Queue trinket swaps during combat, auto-swap when combat ends
-- **Customizable Display** - Scalable, rotatable, dockable windows
-- **DLL-aware** - automatically uses Nampower/ClassicAPI for faster, more accurate cooldowns and bag scans when they're present, with full fallback to vanilla API on a stock client
+- **Customizable Display** - Scalable, rotatable, dockable windows; swap menu direction (`Top`, `Bottom`, `Left`, `Right`) configurable via Options dropdown or `/trinket dock`, rendered at `FULLSCREEN_DIALOG` strata above chat frames, with `LEFT`/`RIGHT` expanding upward
+- **DLL-aware** - automatically uses Nampower/ClassicAPI for faster, more accurate cooldowns, queue sort population, and bag scans when they're present, with full fallback to vanilla API on a stock client
 - **Alt-tab alerts** - optional taskbar flash / system sound when a trinket comes off cooldown while the game is in the background (requires UnitXP SP3)
 - **Duplicate-trinket awareness** - flags in the tooltip when you're carrying two copies of the same trinket, since Priority/Delay settings apply per trinket *name* and therefore to both copies
 
@@ -61,15 +61,6 @@ wired to any TrinketMenu behavior:
 
 If you install either for other addons, TrinketMenu will simply report them
 as present and move on.
-
----
-
-## Installation
-
-1. Extract the `TrinketMenu` folder to `Interface/AddOns/`
-2. Restart WoW or `/reload` if in-game
-3. Optionally install any of the DLLs above for enhanced behavior - run
-   `/trinket compat` after logging in to confirm what got picked up
 
 ---
 
@@ -305,6 +296,25 @@ A: No. Both are detected for informational purposes only - see
 ---
 
 ## Changelog
+
+### 3.5.1 (Fixes & UI upgrades)
+- Fixed worn and combat-queue icons disappearing under ClassicAPI `v1.23.1`:
+  switched `SetDesaturated(0)` to `SetDesaturated(nil)` (since `0` is truthy
+  in Lua) and passed single-value `texture` to `SetTexture(tex)` (avoiding
+  multi-return arguments hitting `wrapModeHorizontal`/`wrapModeVertical`)
+- Set `TrinketMenu_MenuFrame` to `FULLSCREEN_DIALOG` strata so the swap menu
+  renders above chat frames (such as pfUI) while keeping tooltips on top
+- Added a **Menu Dock Position** dropdown (`Top`, `Bottom`, `Left`, `Right`)
+  in Options and `/trinket dock top|bottom|left|right`, with `LEFT`/`RIGHT`
+  expanding upward beside the bar
+- Fixed `TrinketMenu.SetQueue(which, "SORT", profile)` for migrated/new
+  profiles (`profile.top`/`bottom`) and string `which` arguments
+- Fixed `table index is nil` crash in Sort UI handlers when no trinket is
+  selected, non-plain `string.find` in `AddWatchItem`, `newUseAction` reading
+  `TrinketMenu_TooltipScanTextLeft1`, `BAG_UPDATE` nil `arg1`, global `idx`
+  leaks, and `MaxTrinkets` cap in `ScanBaggedTrinkets`
+- Moved `DetectMods()` refresh to `PLAYER_LOGIN`, added Nampower `GetTrinkets()`
+  fast path in `PopulateSort`, and added `/trinket trace`
 
 ### 3.5 (DLL-compat build)
 - Separated ClassicAPI detection (`CLASSIC_API_VERSION`) from `C_Container`
